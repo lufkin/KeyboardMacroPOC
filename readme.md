@@ -12,6 +12,17 @@ The objective of this project is to build a lightweight, cross-platform Python u
 * **Target Application:** Automated string injection into *Final Fantasy XIV (FFXIV)* running on standard console platforms (e.g., Nintendo Switch / PlayStation 5).
 * **Game Engine Rules:** In-game text macros are strictly capped at **15 rows maximum**.
 * **Device Portability & Durability:** The architecture must scale gracefully across diverse QMK/VIA-compatible mechanical keyboard hardware matrix definitions, relying purely on low-level USB protocols without demanding proprietary manufacturer-specific handshakes.
+The device acts as a "smart bridge." It exposes a clean data-syncing API to web applications (Raphael-XIV / Teamcraft) via native browser communication protocols, stores the macro array internally, and connects to the console as a standard USB HID keyboard to execute the automated keystrokes.
+
+The product is a configurable USB keyboard macro-input device. Playback requires an intentional physical button press, supports one active macro at a time, and provides a dedicated stop/cancel control. Users are responsible for complying with applicable game and platform rules.
+
+### Open Hardware Distribution
+The project will publish its firmware source, browser uploader, KiCad schematic and PCB files, bill of materials, and printable enclosure files. Optional Ko-fi donations and Etsy listings for assembled hardware provide support for users who prefer a ready-built unit.
+
+### Connection Constraint
+The standard USB port on a Pico, Trinkey, or similar microcontroller is a USB **device** port. It can act as either the browser-facing WebUSB device during configuration or the console-facing HID keyboard during playback, but it cannot do both on the same port at the same time.
+
+The MVP workflow is therefore: configure the device from a computer or phone over USB, disconnect it, then connect it to the console for playback. A later wireless model can use Web Bluetooth for configuration while its USB port remains connected to the console; this requires a BLE-capable target such as an ESP32-S3 or Pico W-class board. A two-USB-controller design is possible but out of scope for the MVP.
 
 ---
 
@@ -94,6 +105,11 @@ Standard configurations are decoupled by targeting bare communication endpoints 
 ## 4. Hardware Firmware Setup (QMK C Layer)
 
 To accept dynamic external macro overriding commands, your keyboard layout code requires standard routing functions enabled in its source tree. 
+### 2.1 Supported Microcontrollers (Reference Targets)
+* **Raspberry Pi Pico W / Pico 2 W (POC recommendation):** USB HID playback with Wi-Fi configuration from a local browser page while remaining connected to the console.
+* **Raspberry Pi Pico / Pico 2:** USB HID playback with wired configuration; disconnect from the computer or phone before connecting to the console.
+* **Adafruit NeoKey Trinkey / USB Keys:** Direct-plug form factor (no cables required).
+* **ESP32-S3 / Pico 2 W:** Wireless Web Bluetooth (BLE) + Wired USB combination target.
 
 ### `config.h` (Environment Constants)
 ```c
@@ -130,6 +146,12 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
 }
 #endif
 ```
+
+### 3.2 Wireless Connection: Web Bluetooth (WebBLE) API
+For wireless variations, the browser exposes an explicit GATT communication service. The browser connects over-the-air, updates the configuration records, and allows the device to process the values seamlessly.
+
+### 3.3 Wireless Connection: Local Wi-Fi API
+The Pico W POC exposes a local Wi-Fi access point and a small HTTP upload API while its USB port remains connected to the console as a HID keyboard. A phone or computer joins the device network, opens its local configuration page, and uploads macro text in an HTTP `POST` body. Raw macro content must not be sent as a URL query parameter because line breaks and special characters require fragile escaping and URLs have practical length limits.
 
 ---
 
