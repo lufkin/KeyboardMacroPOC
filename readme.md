@@ -1,7 +1,8 @@
-# Technical Specification: Cross-Platform QMK/VIA Dynamic Macro Injector
-**Target Architecture:** Custom Python Utility ↔ QMK Raw HID ↔ Console/PC Text Input Target  
-**Author:** Senior Data Engineer / Architect  
-**Environment:** Visual Studio Code & Gemini Code Assistant Integration  
+# Technical Product Specification: Universal FFXIV Crafting Macro Injector Stick
+**Project Type:** Standalone Hardware Emulation Appliance + Browser Integration  
+**Architecture:** Web-to-Microcontroller (WebUSB/WebBLE) ➔ USB HID Keyboard Emulation  
+**Target Platform:** Nintendo Switch 2 / PlayStation 5 (FFXIV Console Client)  
+**Development Target:** Python/CircuitPython Workspace for VS Code & Gemini AI  
 
 ---
 
@@ -12,30 +13,6 @@ The objective of this project is to build a lightweight, cross-platform Python u
 * **Target Application:** Automated string injection into *Final Fantasy XIV (FFXIV)* running on standard console platforms (e.g., Nintendo Switch / PlayStation 5).
 * **Game Engine Rules:** In-game text macros are strictly capped at **15 rows maximum**.
 * **Device Portability & Durability:** The architecture must scale gracefully across diverse QMK/VIA-compatible mechanical keyboard hardware matrix definitions, relying purely on low-level USB protocols without demanding proprietary manufacturer-specific handshakes.
-The device acts as a "smart bridge." It exposes a clean data-syncing API to web applications (Raphael-XIV / Teamcraft) via native browser communication protocols, stores the macro array internally, and connects to the console as a standard USB HID keyboard to execute the automated keystrokes.
-
-The product is a configurable USB keyboard macro-input device. Playback requires an intentional physical button press, supports one active macro at a time, and provides a dedicated stop/cancel control. Users are responsible for complying with applicable game and platform rules.
-
-### Current Implementation and Confirmed Findings
-
-The working proof of concept is in [`pico_single_button/`](pico_single_button/). It runs on a Raspberry Pi Pico WH with CircuitPython and presents itself as a standard USB HID keyboard. Pressing a momentary button wired between `GP15` and ground types a fixed command, presses Enter, and repeats it for the configured number of lines.
-
-The prototype established the following baseline:
-
-* A Pico WH can type the command reliably with explicit per-character and per-line delays; the current defaults are 100 ms between characters and 1 second between lines.
-* `GP15` can use the Pico's internal pull-up, so the proof button requires no external resistor.
-* Holding the same button while USB is connected selects a keyboard-only boot configuration. This disables the `CIRCUITPY` drive and non-keyboard USB functions for that connection, which is the compatibility mode intended for Nintendo Switch testing.
-* The board has one USB device port. It must be disconnected from the programming computer before it is connected to a console. The current proof does not provide simultaneous USB configuration and HID playback.
-
-The current firmware intentionally has no persisted macro slots, uploader, Wi-Fi access point, browser API, hotbar chaining, or stop/cancel input. Those remain follow-on work after the basic HID playback path is validated on the target console.
-
-### Open Hardware Distribution
-The project will publish its firmware source, browser uploader, KiCad schematic and PCB files, bill of materials, and printable enclosure files. Optional Ko-fi donations and Etsy listings for assembled hardware provide support for users who prefer a ready-built unit.
-
-### Connection Constraint
-The standard USB port on a Pico, Trinkey, or similar microcontroller is a USB **device** port. It can act as either the browser-facing WebUSB device during configuration or the console-facing HID keyboard during playback, but it cannot do both on the same port at the same time.
-
-The validated MVP workflow is: copy the CircuitPython firmware to the board from a computer, disconnect it, then connect it to the console for playback. A later wireless model could use a local Wi-Fi upload page or Web Bluetooth for configuration while its USB port remains connected to the console. That requires implementing the radio, upload protocol, validation, and persistent storage; none of those services are present in the current Pico proof. A two-USB-controller design is possible but out of scope for the MVP.
 
 ---
 
@@ -43,52 +20,57 @@ The validated MVP workflow is: copy the CircuitPython firmware to the board from
 ### 2. Detailed System Architecture Topology
 
 ```text
-                  +─────────────────────────────+
+                   +──────────────────────────────────+
 
-                  | Raphael-XIV Crafting Solver |
-                  | (Produces raw crafting text)|
-                  +──────────────┬──────────────+
-                                 |
-                                 | (Copy / Web Scrape)
-                                 v
-                  +─────────────────────────────+
+                   |    Raphael-XIV / Teamcraft Web   |
+                   |   (Generates multi-line macro)   |
+                   +────────────────┬─────────────────+
+                                    |
+                                    | (Browser Link Connection)
+                                    v
+                   +──────────────────────────────────+
 
-                  |   Python Execution Engine   |
-                  | - Tokenizer & Text Cleaner  |
-                  | - 14-Line Parsing & Chunking|
-                  | - Hotbar Sequence Navigation|
-                  +──────────────┬──────────────+
-                                 |
-                                 | (Serializes into 64-Byte HID packets)
-                                 v
-                  +─────────────────────────────+
+                   |   Modern Browser Layout Port     |
+                   | (Uses Native WebUSB / WebBLE API)|
+                   +────────────────┬─────────────────+
+                                    |
+                                    | (Sends raw string byte arrays)
+                                    v
++─────────────────────────────────────────────────────────────────────+
 
-                  |    Standard USB HID Path    |
-                  | (Targeting Device VID/PID)  |
-                  +──────────────┬──────────────+
-                                 |
-                                 | (Direct RAW HID Data Pipeline)
-                                 v
-+─────────────────────────────────────────────────────────────+
+|               Target Emulator Hardware Appliance                    |
+|                (e.g., Raspberry Pi Pico Dongle)                     |
+|                                                                     |
+|    +──────────────────────+              +──────────────────────+   |
+|    | CircuitPython File   |              |  Local Flash VFS     |   |
+|    |   Engine Runtime     |              |    Storage System    |   |
+|    |                      |              |                      |   |
+|    | Intercepts payload   ├─────────────►| Commits and saves to |   |
+|    | data streams natively|              | macro_0.txt / 1.txt  |   |
+|    +──────────────────────+              +──────────────────────+   |
+|               |                                                     |
+|               | (User presses physical button to trigger script)    |
+|               v                                                     |
+|    +──────────────────────+                                         |
+|    |   USB HID Keyboard   |                                         |
+|    |   Emulation Layer    |                                         |
+|    |                      |                                         |
+|    | Controls character   |                                         |
+|    | delays at 45ms loops |                                         |
+|    +──────────────────────+                                         |
++───────────────────────────────┬─────────────────────────────────────+
+                                |
+                                | (Standard USB Lead Wired Bridge)
+                                v
+                   +──────────────────────────────────+
 
-|               Keychron K10 Max QMK Firmware                 |
-|                                                             |
-|   +─────────────────────────+     +─────────────────────+   |
-|   |   raw_hid_receive Hook  |     | Dynamic Macro Space |   |
-|   |                         |     |                     |   |
-|   | Intercepts Command 0x32 ├────►| Overwrites Storage  |   |
-|   | Payload Frames          |     | Registers (M0-M3)   |   |
-|   +─────────────────────────+     +─────────────────────+   |
-+──────────────────────────────┬──────────────────────────────+
-                               |
-                               | (Physical Selector Switch)
-                               v
-                  +─────────────────────────────+
-
-                  |       Nintendo Switch       |
-                  | (Types text cleanly over USB|
-                  +─────────────────────────────+
+                   | Nintendo Switch 2 Console Dock   |
+                   |                                  |
+                   | Logs dongle as generic hardware, |
+                   | typing lines without text bugs.  |
+                   +──────────────────────────────────+
 ```
+
 
 
 ---
@@ -118,11 +100,6 @@ Standard configurations are decoupled by targeting bare communication endpoints 
 ## 4. Hardware Firmware Setup (QMK C Layer)
 
 To accept dynamic external macro overriding commands, your keyboard layout code requires standard routing functions enabled in its source tree. 
-### 2.1 Supported Microcontrollers (Reference Targets)
-* **Raspberry Pi Pico WH / Pico W:** Current POC target. CircuitPython USB HID keyboard playback with a `GP15` button. Wired configuration requires disconnecting the board before console playback.
-* **Raspberry Pi Pico / Pico 2:** Suitable for the same wired HID playback model; disconnect from the computer or phone before connecting to the console.
-* **Adafruit NeoKey Trinkey / USB Keys:** Direct-plug form factor (no cables required).
-* **ESP32-S3 / Pico 2 W:** Candidate hardware for a future wireless configuration channel plus wired USB HID combination target.
 
 ### `config.h` (Environment Constants)
 ```c
@@ -160,118 +137,91 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
 #endif
 ```
 
-### 3.2 Wireless Connection: Web Bluetooth (WebBLE) API
-For wireless variations, the browser exposes an explicit GATT communication service. The browser connects over-the-air, updates the configuration records, and allows the device to process the values seamlessly.
+---
 
-### 3.3 Wireless Connection: Local Wi-Fi API
-This is a future design direction, not behavior supplied by the Pico proof. A Pico W implementation could expose a local Wi-Fi access point and a small HTTP upload API while its USB port remains connected to the console as a HID keyboard. A phone or computer would join the device network, open its local configuration page, and upload macro text in an HTTP `POST` body. Raw macro content should not be sent as a URL query parameter because line breaks and special characters require fragile escaping and URLs have practical length limits.
+## 4. Hardware Playback & Timing Engine (CircuitPython/C++)
+
+The device firmware remains static. It acts strictly as a dedicated script playback engine. When the physical onboard button is pressed (or triggered by a remote event), it streams the saved macro string back out of its USB port into the Nintendo Switch console using precise timing pacing.
+
+### Implementation Blueprint (`code.py` for CircuitPython Target)
+```python
+import time
+import board
+import digitalio
+import usb_hid
+from adafruit_hid.keyboard import Keyboard
+from adafruit_hid.keycode import Keycode
+from adafruit_hid.keyboard_layout_us import KeyboardLayoutUS
+
+# Initialize Native USB HID Emulation
+kbd = Keyboard(usb_hid.devices)
+layout = KeyboardLayoutUS(kbd)
+
+# Physical Trigger Button Setup
+trigger_btn = digitalio.DigitalInOut(board.GP15)
+trigger_btn.direction = digitalio.Direction.INPUT
+trigger_btn.pull = digitalio.Pull.UP
+
+# Timing & Pacing Profiles
+CHAR_DELAY = 0.045  # 45ms pause between characters (Defeats Switch buffer saturation)
+LINE_DELAY = 0.150  # 150ms pause after Enter key (Defeats IME Language switching bug)
+
+def execute_paced_macro(file_path):
+    """Reads internal storage and pipes keystrokes to the console."""
+    try:
+        with open(file_path, "r") as f:
+            for line in f:
+                clean_line = line.strip()
+                if not clean_line:
+                    continue
+                    
+                # Type characters sequentially
+                for char in clean_line:
+                    layout.write(char)
+                    time.sleep(CHAR_DELAY)
+                
+                # Execute line break transition
+                time.sleep(LINE_DELAY)
+                kbd.send(Keycode.ENTER)
+                time.sleep(LINE_DELAY)
+    except Exception as e:
+        print("Execution tracking error:", e)
+
+while True:
+    if not trigger_btn.value:  # Onboard button pressed
+        print("Triggering FFXIV Macro Sequence Loop...")
+        execute_paced_macro("/macro_0.txt")
+        time.sleep(1.0)  # Debounce safety delay
+    time.sleep(0.01)
+```
 
 ---
 
-## 5. Python Application Boilerplate
+## 5. Software Data Transformation Rules (Web / Companion App Side)
 
-This script serves as your functional framework inside Visual Studio Code. It detects standard QMK HID endpoints and translates text sequences into raw serialization buffers.
+The orchestration app (the web application or local helper utility) owns 100% of the optimization logic before the text ever leaves your PC or phone.
 
-### Requirements
-```bash
-pip install hidapi
-```
-
-### `macro_injector.py`
-```python
-import hid
-import sys
-
-# Target Device Parameters
-TARGET_VID = 0x3434  # Keychron Vendor ID baseline
-TARGET_PID = 0x12A2  # K10 Max Target PID footprint
-
-def find_qmk_device(vid, pid):
-    """Scans local USB infrastructure for valid QMK Raw HID interfaces."""
-    device_interfaces = hid.enumerate(vid, pid)
-    for interface in device_interfaces:
-        # Standard QMK Custom RAW HID interface page signatures
-        if interface['usage_page'] == 0xFF60 and interface['usage'] == 0x0061:
-            return interface['path']
-    return None
-
-def split_macro_text(raw_text, lines_per_chunk=14):
-    """Parses raw text payload into strict, context-bound arrays."""
-    lines = [line.strip() for line in raw_text.strip().split('\n') if line.strip()]
-    chunks = []
-    
-    for i in range(0, len(lines), lines_per_chunk):
-        chunk = lines[i:i + lines_per_chunk]
-        chunks.append("\n".join(chunk))
-    return chunks
-
-def inject_macro_to_hardware(device_path, macro_slot, macro_string):
-    """Packages and pipes data downstream via an active USB interface link."""
-    try:
-        dev = hid.device()
-        dev.open_path(device_path)
-        
-        # Initialize 64-Byte raw USB frame buffer array
-        # Byte 0 is explicitly reserved as the USB HID Report ID (0x00)
-        buffer = [0] * 65 
-        
-        buffer[1] = 0x32          # Command Signature: Custom Macro Write
-        buffer[2] = macro_slot    # Selected target destination index (M0, M1, M2...)
-        
-        # Serialize text characters to byte format
-        encoded_payload = macro_string.encode('utf-8')
-        
-        if len(encoded_payload) > 62:
-            raise ValueError(f"Payload block length ({len(encoded_payload)} bytes) exceeds transaction frame limits.")
-            
-        # Bind string payload arrays to frame buffer
-        for idx, byte_val in enumerate(encoded_payload):
-            buffer[3 + idx] = byte_val
-            
-        # Send raw instruction packet downstream to the hardware
-        dev.write(buffer)
-        dev.close()
-        print(f" Successfully pushed packet to hardware profile slot M{macro_slot}.")
-        
-    except Exception as e:
-        print(f"Transaction failure: {str(e)}", file=sys.stderr)
-
-if __name__ == "__main__":
-    # Sample Mock Input Source string derived from Raphael-XIV solvers
-    sample_solver_output = """
-    /ac "Muscle Memory" <wait.3>
-    /ac "Observe" <wait.3>
-    /ac "Advanced Touch" <wait.3>
-    /ac "Trained Perfection" <wait.3>
-    /ac "Veneration" <wait.2>
-    /ac "Groundwork" <wait.3>
-    """
-    
-    print("Initializing USB HID Scanning routine...")
-    target_path = find_qmk_device(TARGET_VID, TARGET_PID)
-    
-    if not target_path:
-        print("Error: Target QMK/VIA keyboard raw interface endpoint not detected.", file=sys.stderr)
-        sys.exit(1)
-        
-    processed_blocks = split_macro_text(sample_solver_output)
-    
-    for slot_index, text_payload in enumerate(processed_blocks):
-        # Program loop iteratively commits payloads across slots M0, M1, M2...
-        inject_macro_to_hardware(target_path, slot_index, text_payload)
-```
+1. **The 14-Line Parsing Architecture:**
+   * Split incoming multi-line macro configurations every 14 rows.
+2. **Dynamic Hotbar Chain Injection:**
+   * Automatically detect chunk indexes and insert the matching navigation string as line 15.
+   * `Chunk 0` ➔ Appends `/hotbar change 2\n`
+   * `Chunk 1` ➔ Appends `/hotbar change 3\n`
+   * `Final Chunk` ➔ Appends `/hotbar change 1\n`
+3. **Array Packaging:**
+   * Stream separate discrete strings to independent internal files (`macro_0.txt`, `macro_1.txt`, etc.) so the hardware engine can execute individual components sequentially on separate button presses or macro shifts.
 
 ---
 
 ## 6. Prompt Engineering Guide for Gemini Agent Integration
 
-When working with your internal Gemini AI agent inside Visual Studio Code to scale this engine, you can use these hyper-focused technical prompts to iterate on the project:
+When initialization is complete inside VS Code, hand these development prompts directly to your Gemini agent to build the codebase:
 
-### Prompt 1: Enhancing Data Processing Automation
-> *"Review the `split_macro_text` function in our `macro_injector.py` script. Modify its implementation to dynamically inject a 15th string line row to every chunk index array. If it is the final chunk in the loop, append `/hotbar change 1`. For all preceding chunks, evaluate the current loop index counter and append `/hotbar change X` where X is `index + 2` to safely orchestrate automated macro daisy-chain loops."*
+### Prompt 1: Building the String Parsing Utility
+> *"We are building a Python-based utility script to preprocess crafting macro text from Raphael-XIV for a micro-appliance. Write a text tokenizer that imports an external raw string file. Split the text blocks at every 14 lines. If there are lines remaining, dynamically add line 15 to the block containing `/hotbar change X` where X increments sequentially. Save each resultant 15-line block to a string array so it is ready for hardware file distribution."*
 
-### Prompt 2: Scaling USB Architecture Device Profiling
-> *"I want to decouple the current hardcoded `TARGET_VID` and `TARGET_PID` parameters in our script to support scalability for other QMK/VIA custom boards. Help me restructure the module initialization logic to read configurations from an external `devices.json` lookup matrix database file. Include fallback generic tracking routines if an unrecognized keyboard model is detected."*
+### Prompt 2: Writing the WebUSB Delivery Module
+> *"Write a clean JavaScript integration module that can run natively inside a Google Chrome web browser. The script must request pairing access to a generic microcontroller target using the WebUSB API. Once connected, write a routine that loops through our split macro text string arrays and pushes them down to the USB device interface as sequentially indexed data blocks."*
 
-### Prompt 3: Formatting In-Line Input Pacing Controls
-> *"Console OS platforms handle high-velocity USB typing inputs poorly, resulting in dropped text characters. Let's write an isolation formatting module in Python that hooks into the serialization pipeline. This helper must intercept text segments and automatically pad strings with hardware-enforced delay signatures (such as QMK's native `{+DELAY 50}...{-DELAY}` macro strings) to space text strings evenly before sending them down the wire."*
+### Prompt 3: Handling Complex FFXIV Keyboard Mapping
+> *"Review our CircuitPython `code.py` layout template. FFXIV macros depend heavily on quotation marks (`"`) and forward slashes (`/`). Modify the string loop to ensure that when a line is parsed, layout modifiers are held down explicitly with a safe padding delay before and after tapping the target symbol keycode. This will prevent the Nintendo Switch console from accidentally triggering its internal Japanese IME language toggle bug."*
