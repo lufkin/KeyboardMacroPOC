@@ -16,13 +16,26 @@ The device acts as a "smart bridge." It exposes a clean data-syncing API to web 
 
 The product is a configurable USB keyboard macro-input device. Playback requires an intentional physical button press, supports one active macro at a time, and provides a dedicated stop/cancel control. Users are responsible for complying with applicable game and platform rules.
 
+### Current Implementation and Confirmed Findings
+
+The working proof of concept is in [`pico_single_button/`](pico_single_button/). It runs on a Raspberry Pi Pico WH with CircuitPython and presents itself as a standard USB HID keyboard. Pressing a momentary button wired between `GP15` and ground types a fixed command, presses Enter, and repeats it for the configured number of lines.
+
+The prototype established the following baseline:
+
+* A Pico WH can type the command reliably with explicit per-character and per-line delays; the current defaults are 100 ms between characters and 1 second between lines.
+* `GP15` can use the Pico's internal pull-up, so the proof button requires no external resistor.
+* Holding the same button while USB is connected selects a keyboard-only boot configuration. This disables the `CIRCUITPY` drive and non-keyboard USB functions for that connection, which is the compatibility mode intended for Nintendo Switch testing.
+* The board has one USB device port. It must be disconnected from the programming computer before it is connected to a console. The current proof does not provide simultaneous USB configuration and HID playback.
+
+The current firmware intentionally has no persisted macro slots, uploader, Wi-Fi access point, browser API, hotbar chaining, or stop/cancel input. Those remain follow-on work after the basic HID playback path is validated on the target console.
+
 ### Open Hardware Distribution
 The project will publish its firmware source, browser uploader, KiCad schematic and PCB files, bill of materials, and printable enclosure files. Optional Ko-fi donations and Etsy listings for assembled hardware provide support for users who prefer a ready-built unit.
 
 ### Connection Constraint
 The standard USB port on a Pico, Trinkey, or similar microcontroller is a USB **device** port. It can act as either the browser-facing WebUSB device during configuration or the console-facing HID keyboard during playback, but it cannot do both on the same port at the same time.
 
-The MVP workflow is therefore: configure the device from a computer or phone over USB, disconnect it, then connect it to the console for playback. A later wireless model can use Web Bluetooth for configuration while its USB port remains connected to the console; this requires a BLE-capable target such as an ESP32-S3 or Pico W-class board. A two-USB-controller design is possible but out of scope for the MVP.
+The validated MVP workflow is: copy the CircuitPython firmware to the board from a computer, disconnect it, then connect it to the console for playback. A later wireless model could use a local Wi-Fi upload page or Web Bluetooth for configuration while its USB port remains connected to the console. That requires implementing the radio, upload protocol, validation, and persistent storage; none of those services are present in the current Pico proof. A two-USB-controller design is possible but out of scope for the MVP.
 
 ---
 
@@ -106,10 +119,10 @@ Standard configurations are decoupled by targeting bare communication endpoints 
 
 To accept dynamic external macro overriding commands, your keyboard layout code requires standard routing functions enabled in its source tree. 
 ### 2.1 Supported Microcontrollers (Reference Targets)
-* **Raspberry Pi Pico W / Pico 2 W (POC recommendation):** USB HID playback with Wi-Fi configuration from a local browser page while remaining connected to the console.
-* **Raspberry Pi Pico / Pico 2:** USB HID playback with wired configuration; disconnect from the computer or phone before connecting to the console.
+* **Raspberry Pi Pico WH / Pico W:** Current POC target. CircuitPython USB HID keyboard playback with a `GP15` button. Wired configuration requires disconnecting the board before console playback.
+* **Raspberry Pi Pico / Pico 2:** Suitable for the same wired HID playback model; disconnect from the computer or phone before connecting to the console.
 * **Adafruit NeoKey Trinkey / USB Keys:** Direct-plug form factor (no cables required).
-* **ESP32-S3 / Pico 2 W:** Wireless Web Bluetooth (BLE) + Wired USB combination target.
+* **ESP32-S3 / Pico 2 W:** Candidate hardware for a future wireless configuration channel plus wired USB HID combination target.
 
 ### `config.h` (Environment Constants)
 ```c
@@ -151,7 +164,7 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
 For wireless variations, the browser exposes an explicit GATT communication service. The browser connects over-the-air, updates the configuration records, and allows the device to process the values seamlessly.
 
 ### 3.3 Wireless Connection: Local Wi-Fi API
-The Pico W POC exposes a local Wi-Fi access point and a small HTTP upload API while its USB port remains connected to the console as a HID keyboard. A phone or computer joins the device network, opens its local configuration page, and uploads macro text in an HTTP `POST` body. Raw macro content must not be sent as a URL query parameter because line breaks and special characters require fragile escaping and URLs have practical length limits.
+This is a future design direction, not behavior supplied by the Pico proof. A Pico W implementation could expose a local Wi-Fi access point and a small HTTP upload API while its USB port remains connected to the console as a HID keyboard. A phone or computer would join the device network, open its local configuration page, and upload macro text in an HTTP `POST` body. Raw macro content should not be sent as a URL query parameter because line breaks and special characters require fragile escaping and URLs have practical length limits.
 
 ---
 
