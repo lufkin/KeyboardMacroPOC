@@ -95,9 +95,95 @@ Standard configurations are decoupled by targeting bare communication endpoints 
   * Product ID (PID): `0x12A2` (K10 Max variant or equivalent)
 * **The Raw USB Protocol:** Communication executes across **Interface 1 (Usage Page: `0xFF60`, Usage: `0x61`)**, passing 64-byte packet blocks.
 
+### 3.3 Validated Native Pico USB HID Profile
+
+The native TinyUSB Pico firmware has been tested successfully with FFXIV on a Nintendo Switch 2. The working profile is a deliberately simple, single-interface boot keyboard:
+
+* **USB manufacturer:** `Lufkin`
+* **USB product:** `Pico USB Keyboard Macro Injector`
+* **VID/PID:** `0x2E8A:0x0105` (Raspberry Pi/Pico identifiers)
+* **USB class:** HID keyboard, boot subclass and keyboard protocol
+* **HID report:** Standard 6-key-rollover keyboard report with no report ID
+* **HID interrupt endpoint:** 8-byte buffer, configured with a 10 ms polling interval
+* **Other USB functions:** Disabled; no CDC serial, mass storage, MIDI, vendor interface, NKRO, media keys, or composite interface
+
+The 8-byte HID endpoint buffer is important for this device. The Pico worked as expected in a PC text field before this setting was changed, but FFXIV on Switch 2 accepted the keyboard only after the endpoint buffer was reduced from 64 bytes to 8 bytes. The control endpoint remains 64 bytes.
+
+The current validation payload is `/echo Pico macro test`, sent twice after pressing the physical button on `GP15`. The tested firmware source is in [`pico_native_keyboard/`](pico_native_keyboard/).
+
 ---
 
-## 4. Hardware Firmware Setup (QMK C Layer)
+## 4. Configurable Macro Roadmap
+
+The native Pico firmware currently plays a compiled-in test macro. The following features are planned; they are not yet implemented. The working USB HID profile above should remain unchanged while storage, configuration, and networking are added around it.
+
+### 4.1 Stored Macro Configuration
+
+The first runtime data model should contain one active macro configuration with:
+
+* Up to 15 explicit macro rows.
+* A configurable delay between characters.
+* A configurable delay after each submitted line.
+* An enabled/disabled setting for row 15.
+* User-provided row 15 text rather than a hard-coded navigation rule.
+* Version, length, and checksum fields for validation.
+
+Row 15 could contain `/hotbar change 1`, a custom echo or sound-related command supported by the target client, another action, or no command at all. The software should store the selected text exactly as configured instead of assuming that row 15 is always a hotbar transition.
+
+The record should normalize line endings, enforce maximum row and total lengths, reject unsupported input safely, and provide defaults when flash data is missing or invalid. Empty rows should initially be skipped rather than submitted as blank lines unless FFXIV testing shows that blank submissions are required.
+
+### 4.2 Flash Persistence
+
+Add a flash-storage abstraction that writes a complete, validated configuration only after an update finishes. The record should use erase-aligned sectors, a checksum, and redundant copies or an equivalent recovery strategy so an interrupted write does not destroy the last known-good macro. Playback must read the stored configuration without writing flash on each button press.
+
+The firmware should load the saved record at startup and fall back to the built-in test macro if validation fails. Multiple macro slots can be added later, after the single active configuration path is reliable.
+
+### 4.3 Runtime Playback
+
+Refactor the current playback state machine to consume the loaded configuration instead of the compile-time `macro_text`, `macro_line_count`, and timing constants. Preserve the tested `GP15` trigger, ASCII-to-HID mapping, pacing state machine, and USB reports. Invalid lengths or settings must be rejected before playback so stored data cannot overrun buffers.
+
+### 4.4 Local Wi-Fi Configuration
+
+The recommended configuration transport is Pico W station mode on the existing home Wi-Fi network:
+
+```text
+Browser and internet
+    |
+     Home Wi-Fi
+    |
+Pico W: local API and flash storage
+    |
+USB HID keyboard -> Nintendo Switch 2
+```
+
+The browser remains connected to the normal internet while sending a local request to the Pico. The Pico should not be exposed to public inbound internet traffic. Wi-Fi startup failure must not prevent USB keyboard playback using the last valid configuration.
+
+### 4.5 Local API and Browser Controls
+
+Add a small authenticated local API after flash persistence is proven:
+
+* `GET /api/status` to report connectivity, active configuration, and firmware status.
+* `GET /api/config` to load the current rows and timing settings.
+* `POST /api/config` to validate and save a complete configuration.
+
+The browser configuration page should provide 15 row editors, character-delay and line-break-delay controls, a row-15 enable/disable control, current-device status, and an explicit Save/Apply action. The Pico-hosted page is the preferred first implementation because it avoids cross-origin browser issues. A separate web application can continue generating the macro and send the resulting configuration to the Pico locally.
+
+### 4.6 Implementation Stages and Verification
+
+1. Freeze the current Switch 2-compatible USB descriptor and record the PC text-field and FFXIV regression tests.
+2. Define and host-test the configuration schema, line normalization, limits, checksum, and row-15 behavior.
+3. Implement flash save/load and recovery, then verify persistence across reboot and interrupted writes.
+4. Refactor playback to use stored rows and runtime timing values; verify delay changes in a PC text field and then in FFXIV on Switch 2.
+5. Add Pico W station-mode networking without changing the USB descriptor or keyboard endpoint.
+6. Add the authenticated local API and verify malformed or unauthorized requests cannot commit data.
+7. Add the browser editor and verify that a saved configuration is reported as persisted before testing playback.
+8. Repeat the USB descriptor, PC keyboard, and Switch 2 FFXIV tests after every firmware change.
+
+The USB connection remains playback-only. Browser configuration should use the Pico W network connection so the Switch 2 continues to see the known-good single-interface HID keyboard.
+
+---
+
+## 5. Hardware Firmware Setup (QMK C Layer)
 
 To accept dynamic external macro overriding commands, your keyboard layout code requires standard routing functions enabled in its source tree. 
 
@@ -139,7 +225,7 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
 
 ---
 
-## 4. Hardware Playback & Timing Engine (CircuitPython/C++)
+## 6. Hardware Playback & Timing Engine (CircuitPython/C++)
 
 The device firmware remains static. It acts strictly as a dedicated script playback engine. When the physical onboard button is pressed (or triggered by a remote event), it streams the saved macro string back out of its USB port into the Nintendo Switch console using precise timing pacing.
 
@@ -197,7 +283,7 @@ while True:
 
 ---
 
-## 5. Software Data Transformation Rules (Web / Companion App Side)
+## 7. Software Data Transformation Rules (Web / Companion App Side)
 
 The orchestration app (the web application or local helper utility) owns 100% of the optimization logic before the text ever leaves your PC or phone.
 
@@ -213,7 +299,7 @@ The orchestration app (the web application or local helper utility) owns 100% of
 
 ---
 
-## 6. Prompt Engineering Guide for Gemini Agent Integration
+## 8. Prompt Engineering Guide for Gemini Agent Integration
 
 When initialization is complete inside VS Code, hand these development prompts directly to your Gemini agent to build the codebase:
 
