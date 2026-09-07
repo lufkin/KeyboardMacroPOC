@@ -1,0 +1,13 @@
+build/
+*.o
+*.a
+*.uf2
+*.hex
+*.bin
+*.map
+*.d
+.vscode/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
